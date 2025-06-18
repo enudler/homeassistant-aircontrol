@@ -1,12 +1,12 @@
 {
   "domain": "aircontrolbase",
   "name": "AirControlBase",
-  "documentation": "https://github.com/enudler/homeassistant-aircontrol",
+  "documentation": "https://github.com/enudler/homeassistant-aircontrolbase",
   "dependencies": [],
   "codeowners": ["@enudler"],
   "requirements": ["aiohttp"],
-  "version": "1.0.5",
+  "version": "1.0.1",
   "config_flow": true,
   "iot_class": "cloud_polling",
-  "logo": "custom_components/aircontrolbase/logo.png"
+  "logo": "logo.png"
 }
