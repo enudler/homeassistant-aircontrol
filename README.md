@@ -1,62 +1,296 @@
-# Home Assistant AirControlBase Integration
+# 🌡️ AirControlBase - Home Assistant Integration
 
-This is a custom integration for Home Assistant to control AirControlBase air conditioning devices.
+[![HACS Badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/enudler/homeassistant-aircontrol?include_prereleases&style=flat-square)](https://github.com/enudler/homeassistant-aircontrol/releases)
+[![GitHub Actions](https://img.shields.io/github/actions/workflow/status/enudler/homeassistant-aircontrol/ci.yml?branch=main&style=flat-square)](https://github.com/enudler/homeassistant-aircontrol/actions)
+[![License](https://img.shields.io/github/license/enudler/homeassistant-aircontrol?style=flat-square)](LICENSE)
 
-## Features
+<p align="center">
+  <img src="custom_components/aircontrolbase/logo.png" alt="AirControlBase Logo" width="200"/>
+</p>
 
-- Control your AirControlBase AC devices through Home Assistant
-- Support for temperature control
-- Multiple operation modes (Cool, Heat, Dry, Fan)
-- Fan speed control
-- Swing mode control
-- Automatic device discovery
-- Real-time status updates
+A custom Home Assistant integration for **AirControlBase** cloud-connected air conditioning devices. Control your AC units directly from Home Assistant with full climate entity support.
 
-## Installation
+---
 
-1. Download this repository
-2. Copy the `custom_components/aircontrolbase` directory to your Home Assistant's `custom_components` directory
+## ✨ Features
+
+- 🎛️ **Full Climate Control** - Temperature, mode, fan speed, and swing control
+- 🔄 **Real-time Updates** - Cloud polling for current device status
+- 🏠 **Auto Discovery** - Automatically discovers all devices on your account
+- 📱 **Config Flow** - Easy setup through the Home Assistant UI
+- 🔐 **Session Recovery** - Automatic re-authentication on session expiry
+- 🌡️ **Multiple Modes** - Cool, Heat, Dry, Fan, and Auto modes
+- 💨 **Fan Control** - Multiple fan speed settings
+- ↕️ **Swing Control** - Vertical swing mode support
+
+## 📋 Requirements
+
+- Home Assistant 2024.1.0 or newer
+- AirControlBase account with registered devices
+- Internet connectivity for cloud API access
+
+---
+
+## 📦 Installation
+
+### HACS Installation (Recommended)
+
+1. Open HACS in Home Assistant
+2. Click the three dots menu (⋮) in the top right
+3. Select **"Custom repositories"**
+4. Add this repository URL: `https://github.com/enudler/homeassistant-aircontrol`
+5. Select **"Integration"** as the category
+6. Click **"Add"**
+7. Search for **"AirControlBase"** in HACS
+8. Click **"Download"**
+9. Restart Home Assistant
+
+### Manual Installation
+
+1. Download the latest release from the [Releases](https://github.com/enudler/homeassistant-aircontrol/releases) page
+2. Extract and copy the `custom_components/aircontrolbase` folder to your Home Assistant `config/custom_components/` directory
 3. Restart Home Assistant
-4. Go to Configuration > Integrations
-5. Click the "+ Add Integration" button
-6. Search for "AirControlBase"
-7. Enter your AirControlBase email and password
 
-## Configuration
+### Installation from Artifact
 
-The integration requires the following configuration:
+For testing pre-release versions:
 
-- Email: Your AirControlBase account email
-- Password: Your AirControlBase account password
+1. Go to [Actions](https://github.com/enudler/homeassistant-aircontrol/actions)
+2. Select a successful workflow run
+3. Download the `custom_components` artifact
+4. Extract and copy to your `config/custom_components/` directory
+5. Restart Home Assistant
 
-## Support
+---
 
-If you encounter any issues or have questions, please open an issue in this repository.
+## ⚙️ Configuration
 
-## License
+1. Go to **Settings** → **Devices & Services**
+2. Click **"+ Add Integration"**
+3. Search for **"AirControlBase"**
+4. Enter your AirControlBase credentials:
+   - **Email**: Your AirControlBase account email
+   - **Password**: Your AirControlBase account password
+5. Click **Submit**
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+Your AC devices will be automatically discovered and added as climate entities.
 
-## Running Tests
+---
 
-To run the test suite, first install the dependencies:
+## 🔧 Supported Features
 
-```
+| Feature | Support |
+|---------|---------|
+| Temperature Control | ✅ |
+| HVAC Modes (Cool/Heat/Dry/Fan/Auto) | ✅ |
+| Fan Speed Control | ✅ |
+| Swing Mode | ✅ |
+| Power On/Off | ✅ |
+| Current Temperature | ✅ |
+| Target Temperature | ✅ |
+
+---
+
+## 🛠️ Development
+
+### Prerequisites
+
+- Python 3.11 or 3.12
+- Git
+- A virtual environment is recommended
+
+### Setup Development Environment
+
+```bash
+# Clone the repository
+git clone https://github.com/enudler/homeassistant-aircontrol.git
+cd homeassistant-aircontrol
+
+# Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+pip install pytest pytest-asyncio pytest-cov aiohttp
 ```
 
-Set your AirControlBase credentials as environment variables:
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run tests with coverage
+pytest tests/ --cov=custom_components/aircontrolbase --cov-report=term-missing
+
+# Run a specific test
+pytest tests/test_aircontrolbase.py::test_login_success -v
+```
+
+### Testing with Real Credentials
+
+For integration testing with actual AirControlBase devices:
+
+```bash
+export AIRCONTROLBASE_EMAIL="your@email.com"
+export AIRCONTROLBASE_PASSWORD="your_password"
+pytest tests/ -v -s
+```
+
+### Code Quality
+
+The project uses GitHub Actions for continuous integration:
+
+- **Tests** run on Python 3.11 and 3.12
+- **HACS Validation** ensures compatibility with HACS
+- **Hassfest Validation** validates Home Assistant integration requirements
+
+---
+
+## 🚀 Release Process
+
+### Creating a New Release
+
+#### Option 1: Using GitHub Actions (Recommended)
+
+1. Go to [Actions](https://github.com/enudler/homeassistant-aircontrol/actions)
+2. Select **"Create Tag and Release"** workflow
+3. Click **"Run workflow"**
+4. Enter the version (e.g., `1.0.0`)
+5. Choose whether to bump `manifest.json` version
+6. Click **"Run workflow"**
+
+The workflow will:
+- Validate version format
+- Update `manifest.json` if selected
+- Run tests and HACS validation
+- Create a Git tag
+- Create a GitHub Release with artifacts
+- Generate changelog from commits
+
+#### Option 2: Manual Tag Release
+
+```bash
+# Update version in manifest.json
+# Edit custom_components/aircontrolbase/manifest.json
+
+# Commit the change
+git add .
+git commit -m "chore: Bump version to X.Y.Z"
+
+# Create and push tag
+git tag -a "vX.Y.Z" -m "Release vX.Y.Z"
+git push origin main --tags
+```
+
+### Version Guidelines
+
+We follow [Semantic Versioning](https://semver.org/):
+
+- **MAJOR** (X.0.0): Breaking changes
+- **MINOR** (0.X.0): New features, backward compatible
+- **PATCH** (0.0.X): Bug fixes, backward compatible
+
+---
+
+## 📊 HACS Compatibility
+
+This integration is designed to be fully compatible with HACS:
+
+### For HACS to Detect Updates
+
+- Releases are published using GitHub Releases
+- The `manifest.json` contains the `version` field
+- HACS will show available versions in the UI
+- Users can select which version to install
+
+### Repository Structure
 
 ```
-export AIRCONTROLBASE_EMAIL="email@email.com"
-export AIRCONTROLBASE_PASSWORD="password"
+homeassistant-aircontrol/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml              # CI/CD pipeline
+│       ├── release.yml         # Auto-release on tags
+│       └── create-release.yml  # Manual release workflow
+├── custom_components/
+│   └── aircontrolbase/
+│       ├── __init__.py
+│       ├── api.py
+│       ├── climate.py
+│       ├── config_flow.py
+│       ├── const.py
+│       ├── logo.png
+│       ├── manifest.json
+│       └── translations/
+├── tests/
+│   ├── conftest.py
+│   └── test_aircontrolbase.py
+├── hacs.json
+├── README.md
+└── requirements.txt
 ```
 
-Then run the tests with:
+---
 
-```
-pytest -s tests/test_aircontrolbase.py
+## 🐛 Troubleshooting
+
+### Common Issues
+
+#### Authentication Failed
+- Verify your AirControlBase credentials are correct
+- Check if your account is active on the AirControlBase app
+- Ensure your internet connection is stable
+
+#### Devices Not Appearing
+- Wait a few minutes after setup for devices to sync
+- Check Home Assistant logs for any errors
+- Verify devices are visible in the AirControlBase app
+
+#### Session Expired
+- The integration automatically handles session recovery
+- If issues persist, try removing and re-adding the integration
+
+### Debug Logging
+
+Add to your `configuration.yaml`:
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.aircontrolbase: debug
 ```
 
-The `-s` flag ensures you see all print output from the tests. # homeassistant-aircontrolbase
-# homeassistant-aircontrolbase
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/enudler/homeassistant-aircontrol/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/enudler/homeassistant-aircontrol/discussions)
+
+---
+
+<p align="center">
+  Made with ❤️ for the Home Assistant community
+</p>

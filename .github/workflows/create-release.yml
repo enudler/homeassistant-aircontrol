@@ -1,0 +1,135 @@
+name: Create Tag and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (without v prefix, e.g., 1.0.0)'
+        required: true
+        type: string
+      bump_manifest:
+        description: 'Update version in manifest.json'
+        required: false
+        type: boolean
+        default: true
+      prerelease:
+        description: 'Is this a pre-release?'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Create Tag and Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "Expected format: X.Y.Z or X.Y.Z-suffix"
+            exit 1
+          fi
+          echo "✅ Version format is valid: $VERSION"
+
+      - name: Check if tag exists
+        run: |
+          if git rev-parse "v${{ github.event.inputs.version }}" >/dev/null 2>&1; then
+            echo "❌ Tag v${{ github.event.inputs.version }} already exists!"
+            exit 1
+          fi
+          echo "✅ Tag v${{ github.event.inputs.version }} does not exist"
+
+      - name: Update manifest.json version
+        if: ${{ github.event.inputs.bump_manifest == 'true' }}
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          jq --arg version "$VERSION" '.version = $version' custom_components/aircontrolbase/manifest.json > tmp.json
+          mv tmp.json custom_components/aircontrolbase/manifest.json
+          echo "Updated manifest.json to version $VERSION"
+          cat custom_components/aircontrolbase/manifest.json
+
+      - name: Commit version bump
+        if: ${{ github.event.inputs.bump_manifest == 'true' }}
+        run: |
+          git add custom_components/aircontrolbase/manifest.json
+          git commit -m "chore: Bump version to ${{ github.event.inputs.version }}" || echo "No changes to commit"
+          git push origin ${{ github.ref_name }}
+
+      - name: Run tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio aiohttp
+          pip install -r requirements.txt
+          pytest tests/ -v
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+
+      - name: Create and push tag
+        run: |
+          git tag -a "v${{ github.event.inputs.version }}" -m "Release v${{ github.event.inputs.version }}"
+          git push origin "v${{ github.event.inputs.version }}"
+
+      - name: Create release artifact
+        run: |
+          mkdir -p release/aircontrolbase
+          cp -r custom_components/aircontrolbase/* release/aircontrolbase/
+          cd release
+          zip -r aircontrolbase.zip aircontrolbase
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "## What's Changed since $PREV_TAG" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log $PREV_TAG..HEAD --pretty=format:"- %s" >> CHANGELOG.md
+          else
+            echo "## 🎉 Initial Release" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "First release of AirControlBase integration for Home Assistant." >> CHANGELOG.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: AirControlBase v${{ github.event.inputs.version }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease }}
+          files: |
+            release/aircontrolbase.zip
+          generate_release_notes: true
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Release Created Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v${{ github.event.inputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### What happens next?" >> $GITHUB_STEP_SUMMARY
+          echo "1. HACS will automatically detect the new release" >> $GITHUB_STEP_SUMMARY
+          echo "2. Users will see the update available in HACS" >> $GITHUB_STEP_SUMMARY
+          echo "3. They can update via: Settings → Devices & Services → HACS → Integrations → AirControlBase" >> $GITHUB_STEP_SUMMARY
