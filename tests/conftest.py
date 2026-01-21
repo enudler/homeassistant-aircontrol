@@ -22,8 +22,8 @@ async def session():
     async with aiohttp.ClientSession() as session:
         yield session
 
-@pytest.fixture
-def api_client(session):
+@pytest_asyncio.fixture
+async def api_client(session):
     """Create a mock AirControlBaseAPI client."""
     return AirControlBaseAPI(
         email="test@example.com",
