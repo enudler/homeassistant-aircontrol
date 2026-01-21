@@ -90,75 +90,78 @@ class AirControlBaseAPI:
             _LOGGER.error("Login exception: %s", e)
             raise Exception(f"Authentication failed: {e}")
 
-    async def control_device(self, control: Dict[str, Any], operation: Dict[str, Any]) -> None:
-        """Control a device."""
+    async def _request(self, endpoint: str, data: Dict[str, Any], retry: bool = True) -> Dict[str, Any]:
+        """Centralized request method with automatic re-authentication."""
         if not self._user_id:
-            raise Exception("Not authenticated - please login first")
+            await self.login()
 
-        self._last_update_time = int(time.time() * 1000)
-        data = {
-            "userId": self._user_id,
-            "control": control,
-            "operation": operation,
+        url = f"{self._base_url}{endpoint}"
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
         }
-
-        # Filter the control data to include only the required fields
-        allowed_fields = [
-            "power", "mode", "setTemp", "wind", "swing", "lock", "factTemp",
-            "modeLockValue", "coolLockValue", "heatLockValue", "windLockValue", "unlock", "id"
-        ]
-        filtered_control = {key: control[key] for key in allowed_fields if key in control}
-
-        # Convert control and operation to JSON strings for form encoding
-        form_data = {
-            "userId": self._user_id,
-            "control": json.dumps(operation),
-            "operation": json.dumps(operation),
-        }
-
-        _LOGGER.debug("Sending control request with filtered data: %s", form_data)
+        if self._session_id:
+            headers["Cookie"] = self._session_id
 
         try:
             async with async_timeout.timeout(10):
-                headers = {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                }
-                if self._session_id:
-                    headers["Cookie"] = self._session_id
+                async with self._session.post(url, data=data, headers=headers) as response:
+                    _LOGGER.debug("%s response status: %s", endpoint, response.status)
 
-                async with self._session.post(
-                    f"{self._base_url}/web/device/control",
-                    data=form_data,  # Use form-encoded data
-                    headers=headers,
-                ) as response:
-                    _LOGGER.debug("Control device response status: %s", response.status)
+                    if response.status in (401, 403):
+                        if retry:
+                            _LOGGER.warning("Unauthorized (%s). Attempting re-authentication...", response.status)
+                            self._user_id = None
+                            self._session_id = None
+                            await self.login()
+                            return await self._request(endpoint, data, retry=False)
+                        raise Exception(f"HTTP error {response.status}")
 
                     if response.status != 200:
                         raise Exception(f"HTTP error {response.status}")
 
                     result = await response.json()
-                    _LOGGER.debug("Control device response: %s", result)
+                    _LOGGER.debug("%s response: %s", endpoint, result)
 
-                    # Generate a cURL command for debugging
-                    curl_command = (
-                        f"curl --location '{self._base_url}/web/device/control' \\"
-                        f"\n--header 'Content-Type: application/x-www-form-urlencoded' \\"
-                        f"\n--header 'Cookie: {headers.get('Cookie', '')}' \\"
-                        f"\n--data-urlencode 'userId={self._user_id}' \\"
-                        f"\n--data-urlencode 'control={json.dumps(operation)}' \\"
-                        f"\n--data-urlencode 'operation={json.dumps(operation)}'"
-                    )
-                    _LOGGER.debug("Generated cURL command: %s", curl_command)
+                    # Check for "session expired" or "not logged in" messages/codes
+                    # Some APIs return 200 but with an error code in the body
+                    code = result.get("code")
+                    if (code in ("401", 401, "403", 403) or 
+                        result.get("msg") in ("token expired", "session expired", "请重新登录")): # "Please log in again"
+                        if retry:
+                            _LOGGER.warning("Session expired (code %s). Attempting re-authentication...", code)
+                            self._user_id = None
+                            self._session_id = None
+                            await self.login()
+                            return await self._request(endpoint, data, retry=False)
+                        error_msg = result.get('msg') or "Session expired"
+                        raise Exception(f"Authentication failed: {error_msg}")
 
-                    # Check for success
-                    if not (result.get("code") == "200" or result.get("code") == 200 or 
-                            result.get("msg") == "操作成功"):
-                        error_msg = result.get('msg') or result.get('message') or "Unknown error"
-                        raise Exception(f"Control failed: {error_msg}")
+                    if not (code in ("200", 200) or result.get("msg") == "操作成功"):
+                        error_msg = result.get('msg') or result.get('message') or f"Unknown error (code: {code})"
+                        raise Exception(f"API error: {error_msg}")
 
+                    return result
         except Exception as e:
-            _LOGGER.error("Control device failed: %s", e)
-            raise Exception(f"Device control failed: {e}")
+            if "Authentication failed" in str(e) or "HTTP error 401" in str(e):
+                raise
+            _LOGGER.error("Request to %s failed: %s", endpoint, e)
+            raise Exception(f"Request failed: {e}")
+
+    async def control_device(self, control: Dict[str, Any], operation: Dict[str, Any]) -> None:
+        """Control a device."""
+        self._last_update_time = int(time.time() * 1000)
+        
+        # Convert operation to JSON string for form encoding
+        # The original code seemed to use 'operation' for both 'control' and 'operation' fields in form_data
+        # but the filtered_control logic suggested it might want more. 
+        # Keeping consistent with the working implementation I see in the file lines 114-117.
+        form_data = {
+            "userId": self._user_id if self._user_id else "", # _request will handle login if empty
+            "control": json.dumps(operation),
+            "operation": json.dumps(operation),
+        }
+
+        await self._request("/web/device/control", form_data)
 
     async def get_devices(self) -> List[Dict[str, Any]]:
         """Get all devices."""
@@ -169,88 +172,29 @@ class AirControlBaseAPI:
         ):
             return []
 
-        if not self._user_id:
-            raise Exception("Not authenticated - please login first")
-
-        data = {"userId": self._user_id}
+        data = {"userId": self._user_id if self._user_id else ""}
         
-        try:
-            async with async_timeout.timeout(10):
-                headers = {}
-                if self._session_id:
-                    headers["Cookie"] = self._session_id
-                
-                # Use form data consistently
-                async with self._session.post(
-                    f"{self._base_url}/web/userGroup/getDetails",
-                    data=data,  # Use form data
-                    headers=headers,
-                ) as response:
-                    _LOGGER.debug("Get devices response status: %s", response.status)
-                    
-                    if response.status != 200:
-                        raise Exception(f"HTTP error {response.status}")
-                    
-                    result = await response.json()
-                    _LOGGER.debug("Get devices response: %s", result)
-                    
-                    # Check for success (code "200" for this API)
-                    if (result.get("code") == "200" or result.get("code") == 200 or
-                        result.get("msg") == "操作成功"):  # "Operation successful"
-                        all_devices = []
-                        if result.get("result", {}).get("areas"):
-                            for area in result["result"]["areas"]:
-                                all_devices.extend(area.get("data", []))
-                        _LOGGER.debug("Parsed devices: %s", all_devices)
-                        return all_devices
-                    else:
-                        error_msg = result.get('msg') or result.get('message') or "Unknown error"
-                        _LOGGER.error("Failed to get devices: %s", error_msg)
-                        raise Exception(f"Failed to get devices: {error_msg}")
-                        
-        except Exception as e:
-            _LOGGER.error("Get devices failed: %s", e)
-            raise Exception(f"Failed to get devices: {e}")
+        result = await self._request("/web/userGroup/getDetails", data)
+        
+        all_devices = []
+        if result.get("result", {}).get("areas"):
+            for area in result["result"]["areas"]:
+                all_devices.extend(area.get("data", []))
+        _LOGGER.debug("Parsed devices: %s", all_devices)
+        return all_devices
 
     async def getDetails(self) -> List[Dict[str, Any]]:
         """Fetch device details from the API."""
-        if not self._user_id:
-            raise Exception("Not authenticated - please login first")
+        data = {"userId": self._user_id if self._user_id else ""}
+        
+        result = await self._request("/web/userGroup/getDetails", data)
 
-        data = {"userId": self._user_id}
-
-        try:
-            async with async_timeout.timeout(10):
-                headers = {}
-                if self._session_id:
-                    headers["Cookie"] = self._session_id
-
-                async with self._session.post(
-                    f"{self._base_url}/web/userGroup/getDetails",
-                    data=data,
-                    headers=headers,
-                ) as response:
-                    _LOGGER.debug("GetDetails response status: %s", response.status)
-
-                    if response.status != 200:
-                        raise Exception(f"HTTP error {response.status}")
-
-                    result = await response.json()
-                    _LOGGER.debug("GetDetails response: %s", result)
-
-                    if result.get("code") in ("200", 200) or result.get("msg") == "操作成功":
-                        all_devices = []
-                        if result.get("result", {}).get("areas"):
-                            for area in result["result"]["areas"]:
-                                all_devices.extend(area.get("data", []))
-                        _LOGGER.debug("Parsed devices: %s", all_devices)
-                        return all_devices
-                    else:
-                        error_msg = result.get('msg') or result.get('message') or "Unknown error"
-                        raise Exception(f"API error: {error_msg}")
-        except Exception as err:
-            _LOGGER.error("Error in getDetails: %s", err)
-            raise
+        all_devices = []
+        if result.get("result", {}).get("areas"):
+            for area in result["result"]["areas"]:
+                all_devices.extend(area.get("data", []))
+        _LOGGER.debug("Parsed devices: %s", all_devices)
+        return all_devices
 
     async def test_connection(self) -> bool:
         """Test if the connection and authentication are working."""
