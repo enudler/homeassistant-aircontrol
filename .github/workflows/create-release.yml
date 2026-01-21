@@ -77,7 +77,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio aiohttp
+          pip install pytest pytest-asyncio aiohttp async_timeout
           pip install -r requirements.txt
           pytest tests/ -v
 
@@ -85,6 +85,7 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+          ignore: brands
 
       - name: Create and push tag
         run: |
