@@ -8,10 +8,11 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import AirControlBaseAPI
+from .api import AirControlBaseAPI, AirControlBaseConnectionError, AirControlBaseAuthError, AirControlBaseError
 from .const import (
     CONF_AVOID_REFRESH_STATUS_ON_UPDATE_IN_MS,
     DEFAULT_AVOID_REFRESH_STATUS_ON_UPDATE_IN_MS,
@@ -37,7 +38,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ),
     )
 
-    await api.login()
+    try:
+        await api.login()
+    except AirControlBaseConnectionError as err:
+        _LOGGER.error("Connection error during setup: %s", err)
+        raise ConfigEntryNotReady(f"Timeout while connecting to AirControlBase: {err}") from err
+    except AirControlBaseAuthError as err:
+        _LOGGER.error("Authentication failed during setup: %s", err)
+        return False
+    except Exception as err:
+        _LOGGER.error("Unexpected error during setup: %s", err)
+        raise ConfigEntryNotReady(f"Unexpected error: {err}") from err
 
     async def async_update_data() -> list[dict[str, Any]]:
         """Fetch data from API."""
