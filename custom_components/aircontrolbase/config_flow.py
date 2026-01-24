@@ -11,7 +11,7 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import aiohttp_client
 
-from .api import AirControlBaseAPI
+from .api import AirControlBaseAPI, AirControlBaseConnectionError, AirControlBaseAuthError
 from .const import DOMAIN, CONF_REFRESH_DELAY, DEFAULT_REFRESH_DELAY
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,14 +48,15 @@ class AirControlBaseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 else:
                     errors["base"] = "invalid_auth"
                     
-            except Exception as err:
+            except AirControlBaseConnectionError as err:
+                _LOGGER.error("Connection failed: %s", err)
+                errors["base"] = "cannot_connect"
+            except AirControlBaseAuthError as err:
                 _LOGGER.error("Authentication failed: %s", err)
-                if "HTTP error" in str(err) or "cannot connect" in str(err).lower():
-                    errors["base"] = "cannot_connect"
-                elif "timeout" in str(err).lower():
-                    errors["base"] = "timeout_connect"
-                else:
-                    errors["base"] = "invalid_auth"
+                errors["base"] = "invalid_auth"
+            except Exception as err:
+                _LOGGER.error("Unexpected error: %s", err)
+                errors["base"] = "unknown"
 
         return self.async_show_form(
             step_id="user",

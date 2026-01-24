@@ -7,6 +7,14 @@ import time
 import json
 
 _LOGGER = logging.getLogger(__name__)
+class AirControlBaseError(Exception):
+    """Base exception for AirControlBase."""
+
+class AirControlBaseAuthError(AirControlBaseError):
+    """Exception for authentication errors."""
+
+class AirControlBaseConnectionError(AirControlBaseError):
+    """Exception for connection errors."""
 
 class AirControlBaseAPI:
     """AirControlBase API Client."""
@@ -48,8 +56,10 @@ class AirControlBaseAPI:
                     _LOGGER.debug("Login response status: %s", response.status)
                     _LOGGER.debug("Login response headers: %s", dict(response.headers))
                     
+                    if response.status in (401, 403):
+                        raise AirControlBaseAuthError(f"HTTP error {response.status}")
                     if response.status != 200:
-                        raise Exception(f"HTTP error {response.status}")
+                        raise AirControlBaseConnectionError(f"HTTP error {response.status}")
                     
                     try:
                         result = await response.json()
@@ -70,7 +80,7 @@ class AirControlBaseAPI:
                             self._user_id = result["result"]["id"]
                         else:
                             _LOGGER.error("No user ID found in response: %s", result)
-                            raise Exception("No user ID in response")
+                            raise AirControlBaseAuthError("No user ID in response")
                         
                         # Extract session cookie
                         cookies = response.headers.getall('Set-Cookie', [])
@@ -84,11 +94,13 @@ class AirControlBaseAPI:
                     else:
                         error_msg = result.get('msg') or result.get('message') or f"Unknown error (code: {result.get('code')})"
                         _LOGGER.error("Login failed: %s", error_msg)
-                        raise Exception(f"Login failed: {error_msg}")
+                        raise AirControlBaseAuthError(f"Login failed: {error_msg}")
                         
+        except AirControlBaseAuthError:
+            raise
         except Exception as e:
             _LOGGER.error("Login exception: %s", e)
-            raise Exception(f"Authentication failed: {e}")
+            raise AirControlBaseConnectionError(f"Authentication failed: {e}")
 
     async def _request(self, endpoint: str, data: Dict[str, Any], retry: bool = True) -> Dict[str, Any]:
         """Centralized request method with automatic re-authentication."""
@@ -114,10 +126,10 @@ class AirControlBaseAPI:
                             self._session_id = None
                             await self.login()
                             return await self._request(endpoint, data, retry=False)
-                        raise Exception(f"HTTP error {response.status}")
+                        raise AirControlBaseAuthError(f"HTTP error {response.status}")
 
                     if response.status != 200:
-                        raise Exception(f"HTTP error {response.status}")
+                        raise AirControlBaseConnectionError(f"HTTP error {response.status}")
 
                     result = await response.json()
                     _LOGGER.debug("%s response: %s", endpoint, result)
@@ -134,18 +146,18 @@ class AirControlBaseAPI:
                             await self.login()
                             return await self._request(endpoint, data, retry=False)
                         error_msg = result.get('msg') or "Session expired"
-                        raise Exception(f"Authentication failed: {error_msg}")
+                        raise AirControlBaseAuthError(f"Authentication failed: {error_msg}")
 
                     if not (code in ("200", 200) or result.get("msg") == "操作成功"):
                         error_msg = result.get('msg') or result.get('message') or f"Unknown error (code: {code})"
-                        raise Exception(f"API error: {error_msg}")
+                        raise AirControlBaseError(f"API error: {error_msg}")
 
                     return result
+        except (AirControlBaseAuthError, AirControlBaseError):
+            raise
         except Exception as e:
-            if "Authentication failed" in str(e) or "HTTP error 401" in str(e):
-                raise
             _LOGGER.error("Request to %s failed: %s", endpoint, e)
-            raise Exception(f"Request failed: {e}")
+            raise AirControlBaseConnectionError(f"Request failed: {e}")
 
     async def control_device(self, control: Dict[str, Any], operation: Dict[str, Any]) -> None:
         """Control a device."""

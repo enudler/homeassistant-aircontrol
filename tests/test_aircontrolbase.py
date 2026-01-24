@@ -2,7 +2,12 @@ import pytest
 import json
 from unittest.mock import MagicMock, patch, AsyncMock
 import aiohttp
-from custom_components.aircontrolbase.api import AirControlBaseAPI
+from custom_components.aircontrolbase.api import (
+    AirControlBaseAPI, 
+    AirControlBaseAuthError, 
+    AirControlBaseConnectionError,
+    AirControlBaseError
+)
 
 @pytest.mark.asyncio
 async def test_login_success(api_client):
@@ -37,7 +42,14 @@ async def test_login_failure(api_client):
     mock_cm.__aenter__.return_value = mock_response
     
     with patch.object(api_client._session, 'post', return_value=mock_cm):
-        with pytest.raises(Exception, match="Authentication failed: HTTP error 401"):
+        with pytest.raises(AirControlBaseAuthError, match="HTTP error 401"):
+            await api_client.login()
+
+@pytest.mark.asyncio
+async def test_login_connection_error(api_client):
+    """Test login connection error (e.g. DNS failure)."""
+    with patch.object(api_client._session, 'post', side_effect=Exception("DNS failure")):
+        with pytest.raises(AirControlBaseConnectionError, match="Authentication failed: DNS failure"):
             await api_client.login()
 
 @pytest.mark.asyncio

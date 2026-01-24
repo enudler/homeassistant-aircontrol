@@ -10,6 +10,7 @@ sys.modules["homeassistant.core"] = mock_hass
 sys.modules["homeassistant.helpers"] = mock_hass
 sys.modules["homeassistant.helpers.aiohttp_client"] = mock_hass
 sys.modules["homeassistant.helpers.update_coordinator"] = mock_hass
+sys.modules["homeassistant.exceptions"] = MagicMock()
 
 import pytest_asyncio
 import pytest
